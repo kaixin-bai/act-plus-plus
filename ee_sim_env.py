@@ -14,6 +14,7 @@ from dm_control.rl import control
 from dm_control.suite import base
 
 import IPython
+
 e = IPython.embed
 
 
@@ -34,6 +35,7 @@ def make_ee_sim_env(task_name):
                                         right_arm_qvel (6),         # absolute joint velocity (rad)
                                         right_gripper_qvel (1)]     # normalized gripper velocity (pos: opening, neg: closing)
                         "images": {"main": (480x640x3)}        # h, w, c, dtype='uint8'
+    根据任务名称创建一个双臂仿真环境，该环境使用末端执行器（end-effector, EE）进行控制
     """
     if 'sim_transfer_cube' in task_name:
         xml_path = os.path.join(XML_DIR, f'bimanual_viperx_ee_transfer_cube.xml')
@@ -50,6 +52,7 @@ def make_ee_sim_env(task_name):
     else:
         raise NotImplementedError
     return env
+
 
 class BimanualViperXEETask(base.Task):
     def __init__(self, random=None):
@@ -83,11 +86,11 @@ class BimanualViperXEETask(base.Task):
         # (2) get env._physics.named.data.xpos['vx300s_left/gripper_link']
         #     get env._physics.named.data.xquat['vx300s_left/gripper_link']
         #     repeat the same for right side
-        np.copyto(physics.data.mocap_pos[0], [-0.31718881+0.1, 0.5, 0.29525084])
+        np.copyto(physics.data.mocap_pos[0], [-0.31718881 + 0.1, 0.5, 0.29525084])
         np.copyto(physics.data.mocap_quat[0], [1, 0, 0, 0])
         # right
-        np.copyto(physics.data.mocap_pos[1], np.array([0.31718881-0.1, 0.49999888, 0.29525084]))
-        np.copyto(physics.data.mocap_quat[1],  [1, 0, 0, 0])
+        np.copyto(physics.data.mocap_pos[1], np.array([0.31718881 - 0.1, 0.49999888, 0.29525084]))
+        np.copyto(physics.data.mocap_quat[1], [1, 0, 0, 0])
 
         # reset gripper control
         close_gripper_control = np.array([
@@ -161,7 +164,7 @@ class TransferCubeEETask(BimanualViperXEETask):
         # randomize box position
         cube_pose = sample_box_pose()
         box_start_idx = physics.model.name2id('red_box_joint', 'joint')
-        np.copyto(physics.data.qpos[box_start_idx : box_start_idx + 7], cube_pose)
+        np.copyto(physics.data.qpos[box_start_idx: box_start_idx + 7], cube_pose)
         # print(f"randomized cube position to {cube_position}")
 
         super().initialize_episode(physics)
@@ -189,11 +192,11 @@ class TransferCubeEETask(BimanualViperXEETask):
         reward = 0
         if touch_right_gripper:
             reward = 1
-        if touch_right_gripper and not touch_table: # lifted
+        if touch_right_gripper and not touch_table:  # lifted
             reward = 2
-        if touch_left_gripper: # attempted transfer
+        if touch_left_gripper:  # attempted transfer
             reward = 3
-        if touch_left_gripper and not touch_table: # successful transfer
+        if touch_left_gripper and not touch_table:  # successful transfer
             reward = 4
         return reward
 
@@ -208,16 +211,16 @@ class InsertionEETask(BimanualViperXEETask):
         self.initialize_robots(physics)
         # randomize peg and socket position
         peg_pose, socket_pose = sample_insertion_pose()
-        id2index = lambda j_id: 16 + (j_id - 16) * 7 # first 16 is robot qpos, 7 is pose dim # hacky
+        id2index = lambda j_id: 16 + (j_id - 16) * 7  # first 16 is robot qpos, 7 is pose dim # hacky
 
         peg_start_id = physics.model.name2id('red_peg_joint', 'joint')
         peg_start_idx = id2index(peg_start_id)
-        np.copyto(physics.data.qpos[peg_start_idx : peg_start_idx + 7], peg_pose)
+        np.copyto(physics.data.qpos[peg_start_idx: peg_start_idx + 7], peg_pose)
         # print(f"randomized cube position to {cube_position}")
 
         socket_start_id = physics.model.name2id('blue_socket_joint', 'joint')
         socket_start_idx = id2index(socket_start_id)
-        np.copyto(physics.data.qpos[socket_start_idx : socket_start_idx + 7], socket_pose)
+        np.copyto(physics.data.qpos[socket_start_idx: socket_start_idx + 7], socket_pose)
         # print(f"randomized cube position to {cube_position}")
 
         super().initialize_episode(physics)
@@ -256,12 +259,13 @@ class InsertionEETask(BimanualViperXEETask):
         pin_touched = ("red_peg", "pin") in all_contact_pairs
 
         reward = 0
-        if touch_left_gripper and touch_right_gripper: # touch both
+        if touch_left_gripper and touch_right_gripper:  # touch both
             reward = 1
-        if touch_left_gripper and touch_right_gripper and (not peg_touch_table) and (not socket_touch_table): # grasp both
+        if touch_left_gripper and touch_right_gripper and (not peg_touch_table) and (
+        not socket_touch_table):  # grasp both
             reward = 2
-        if peg_touch_socket and (not peg_touch_table) and (not socket_touch_table): # peg and socket touching
+        if peg_touch_socket and (not peg_touch_table) and (not socket_touch_table):  # peg and socket touching
             reward = 3
-        if pin_touched: # successful insertion
+        if pin_touched:  # successful insertion
             reward = 4
         return reward
