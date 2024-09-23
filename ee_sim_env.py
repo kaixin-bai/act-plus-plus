@@ -55,15 +55,18 @@ def make_ee_sim_env(task_name):
 
 
 class BimanualViperXEETask(base.Task):
+    """
+    用于控制一个双臂机械手的仿真任务。在这个类中，实现了对机械手的运动控制、初始化、状态获取以及观察获取的方法
+    """
     def __init__(self, random=None):
         super().__init__(random=random)
 
     def before_step(self, action, physics):
-        a_len = len(action) // 2
+        a_len = len(action) // 2  # action的length，因为是双臂所以除以2
         action_left = action[:a_len]
         action_right = action[a_len:]
 
-        # set mocap position and quat
+        # set mocap position and quat 把左右臂的姿态复制给仿真器
         # left
         np.copyto(physics.data.mocap_pos[0], action_left[:3])
         np.copyto(physics.data.mocap_quat[0], action_left[3:7])
@@ -71,7 +74,7 @@ class BimanualViperXEETask(base.Task):
         np.copyto(physics.data.mocap_pos[1], action_right[:3])
         np.copyto(physics.data.mocap_quat[1], action_right[3:7])
 
-        # set gripper
+        # set gripper 这里因为给定的gripper是0-1的归一化数值，所以通过PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN函数将归一化数值更改为绝对数值
         g_left_ctrl = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(action_left[7])
         g_right_ctrl = PUPPET_GRIPPER_POSITION_UNNORMALIZE_FN(action_right[7])
         np.copyto(physics.data.ctrl, np.array([g_left_ctrl, -g_left_ctrl, g_right_ctrl, -g_right_ctrl]))
@@ -156,7 +159,7 @@ class BimanualViperXEETask(base.Task):
 class TransferCubeEETask(BimanualViperXEETask):
     def __init__(self, random=None):
         super().__init__(random=random)
-        self.max_reward = 4
+        self.max_reward = 4  # 在这个任务中，最大奖励值为4
 
     def initialize_episode(self, physics):
         """Sets the state of the environment at the start of each episode."""
@@ -176,6 +179,9 @@ class TransferCubeEETask(BimanualViperXEETask):
 
     def get_reward(self, physics):
         # return whether left gripper is holding the box
+        """
+        cube交接任务的reward判定条件，
+        """
         all_contact_pairs = []
         for i_contact in range(physics.data.ncon):
             id_geom_1 = physics.data.contact[i_contact].geom1
@@ -189,6 +195,12 @@ class TransferCubeEETask(BimanualViperXEETask):
         touch_right_gripper = ("red_box", "vx300s_right/10_right_gripper_finger") in all_contact_pairs
         touch_table = ("red_box", "table") in all_contact_pairs
 
+        """
+        如果立方体与右抓取器接触，将奖励值设为1；                             | 右爪碰到了，奖励1
+        如果立方体与右抓取器接触并且不与桌子接触（表示立方体被提起），奖励值设为2； | 右爪把方块拿起来了，奖励2
+        立方体与左抓取器接触（表示尝试了传递操作），将奖励值设为3；              | 左爪有碰到，奖励3
+        如果立方体与左抓取器接触且不与桌子接触（表示传递成功），将奖励值设为4      | 左爪拿到了，奖励4
+        """
         reward = 0
         if touch_right_gripper:
             reward = 1

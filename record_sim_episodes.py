@@ -11,6 +11,7 @@ from sim_env import make_sim_env, BOX_POSE
 from scripted_policy import PickAndTransferPolicy, InsertionPolicy
 
 import IPython
+
 e = IPython.embed
 
 
@@ -67,17 +68,29 @@ def main(args):
         print('Rollout out EE space scripted policy')
         # setup the environment  设定环境并执行策略
         env = make_ee_sim_env(task_name)  # 创建环境：通过 make_ee_sim_env 函数创建一个 EE 仿真环境
-        ts = env.reset()                  # 重置环境：重置环境并获取初始时间步 (ts)
-        episode = [ts]                    # 初始化 episode 列表：将初始时间步添加到 episode 列表中
-        policy = policy_cls(inject_noise) # 初始化策略：创建策略实例
+        ts = env.reset()  # 重置环境：重置环境并获取初始时间步 (ts)
+        """
+        ts={TimeStep:4},
+            'reward':None; discount:None; 0,1,2,3
+            'objservation':
+                'qpos':{ndarray:(14,)}
+                'qvel':{ndarray:(14,)}
+                'env_state':{ndarray:(7,)}
+                'images':{dict:1}{'top':ndarray(480,640,3)}
+                'mocap_pose_left':{ndarray:(7,)}，应该是[x,y,z,w,x,y,z]，即pose+wxyz四元数
+                'mocap_pose_right':{ndarray:(7,)}，[x,y,z,w,x,y,z]，即pose+wxyz四元数
+                'gripper_ctrl':{ndarray:(4,)}
+        """
+        episode = [ts]  # 初始化 episode 列表：将初始时间步添加到 episode 列表中
+        policy = policy_cls(inject_noise)  # 初始化策略：创建策略实例
         # setup plotting
         if onscreen_render:
             ax = plt.subplot()
             plt_img = ax.imshow(ts.observation['images'][render_cam_name])
             plt.ion()
         for step in range(episode_len):
-            action = policy(ts)
-            ts = env.step(action)
+            action = policy(ts)  # action是当前step的左右的pose+四元数+gripper状态，其中gripper状态是0-1的数值，总共16个数值，即ndarray(16)
+            ts = env.step(action)  # 此行代码在执行 ee_sim_env.py 中的各种Task，
             episode.append(ts)
             if onscreen_render:
                 plt_img.set_data(ts.observation['images'][render_cam_name])
@@ -111,10 +124,9 @@ def main(args):
             left_ctrl = PUPPET_GRIPPER_POSITION_NORMALIZE_FN(ctrl[0])
             right_ctrl = PUPPET_GRIPPER_POSITION_NORMALIZE_FN(ctrl[2])
             joint[6] = left_ctrl
-            joint[6+7] = right_ctrl
+            joint[6 + 7] = right_ctrl
 
-        subtask_info = episode[0].observation['env_state'].copy() # box pose at step 0
-
+        subtask_info = episode[0].observation['env_state'].copy()  # box pose at step 0
 
         # -------------------------------------------------------------------------
         """
@@ -130,7 +142,7 @@ def main(args):
         # setup the environment
         print('Replaying joint commands')
         env = make_sim_env(task_name)
-        BOX_POSE[0] = subtask_info # make sure the sim_env has the same object configurations as ee_sim_env
+        BOX_POSE[0] = subtask_info  # make sure the sim_env has the same object configurations as ee_sim_env
         ts = env.reset()
 
         episode_replay = [ts]
@@ -148,7 +160,7 @@ def main(args):
             ax = plt.subplot()
             plt_img = ax.imshow(ts.observation['images'][render_cam_name])
             plt.ion()
-        for t in range(len(joint_traj)): # note: this will increase episode length by 1
+        for t in range(len(joint_traj)):  # note: this will increase episode length by 1
             action = joint_traj[t]
             ts = env.step(action)
             episode_replay.append(ts)
@@ -252,6 +264,7 @@ def main(args):
             图像数据集：为每个相机创建一个数据集，用于存储图像，数据类型为 uint8，并指定数据块大小（chunks）为 (1, 480, 640, 3)。
             关节位置和速度数据集：创建 qpos 和 qvel 数据集，数据类型为 float64。
             动作数据集：创建 action 数据集，数据类型为 float64。
+        TODO：数据的物理含义！！
         """
         # HDF5
         t0 = time.time()
@@ -281,12 +294,12 @@ def main(args):
     print(f'Saved to {dataset_dir}')
     print(f'Success: {np.sum(success)} / {len(success)}')
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--task_name', action='store', type=str, help='task_name', required=True)
     parser.add_argument('--dataset_dir', action='store', type=str, help='dataset saving dir', required=True)
     parser.add_argument('--num_episodes', action='store', type=int, help='num_episodes', required=False)
     parser.add_argument('--onscreen_render', action='store_true')
-    
-    main(vars(parser.parse_args()))
 
+    main(vars(parser.parse_args()))

@@ -49,7 +49,7 @@ class BasePolicy:
     def __call__(self, ts):  # 定义子类的使用方法，__call__可以使得类的实例化像函数一样调用
         # generate trajectory at first timestep, then open-loop execution
         if self.step_count == 0:
-            self.generate_trajectory(ts)  # 在第一步执行时，调用 generate_trajectory 方法生成轨迹
+            self.generate_trajectory(ts)  # 在第一步执行时，调用 generate_trajectory 方法生成轨迹，在这个函数中生成了self.left_trajectory和self.right_trajectory
 
         # obtain left and right waypoints  获取当前和下一个轨迹点
         if self.left_trajectory[0]['t'] == self.step_count:
@@ -87,8 +87,8 @@ class BasePolicy:
             更新步骤计数：增加 step_count，以便下一步使用。
             返回动作：返回包含左臂和右臂动作的完整动作向量
         """
-        action_left = np.concatenate([left_xyz, left_quat, [left_gripper]])
-        action_right = np.concatenate([right_xyz, right_quat, [right_gripper]])
+        action_left = np.concatenate([left_xyz, left_quat, [left_gripper]])      # xyz + quaternion + 夹爪状态
+        action_right = np.concatenate([right_xyz, right_quat, [right_gripper]])  # xyz + quaternion + 夹爪状态
 
         self.step_count += 1
         return np.concatenate([action_left, action_right])
@@ -111,9 +111,9 @@ class PickAndTransferPolicy(BasePolicy):
         """
         盒子信息：从环境状态中提取目标物体（如盒子）的位置信息 box_xyz 和姿态信息 box_quat。
         """
-        box_info = np.array(ts_first.observation['env_state'])
-        box_xyz = box_info[:3]
-        box_quat = box_info[3:]
+        box_info = np.array(ts_first.observation['env_state'])  # ndarray7,场景里box的xyz和四元数
+        box_xyz = box_info[:3]  # pose:xyz
+        box_quat = box_info[3:] # quaternion:wxyz,[1,0,0,0]
         # print(f"Generate trajectory for {box_xyz=}")
 
         # -------------------------------------------------------------------------
@@ -122,19 +122,19 @@ class PickAndTransferPolicy(BasePolicy):
         右臂末端执行器的目标四元数：获取右臂末端执行器的初始姿态，并在此基础上进行旋转操作，将其绕 Y 轴旋转 -60 度，以生成抓取物体时的目标姿态。
         """
         gripper_pick_quat = Quaternion(init_mocap_pose_right[3:])
-        gripper_pick_quat = gripper_pick_quat * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-60)
+        gripper_pick_quat = gripper_pick_quat * Quaternion(axis=[0.0, 1.0, 0.0], degrees=-60)  # pick的姿态是box的姿态在y轴转-60度
 
         # -------------------------------------------------------------------------
         """
         左臂的目标四元数：定义一个左臂的目标四元数，使其绕 X 轴旋转 90 度，这是在与右臂配合时的姿态。
         """
-        meet_left_quat = Quaternion(axis=[1.0, 0.0, 0.0], degrees=90)
+        meet_left_quat = Quaternion(axis=[1.0, 0.0, 0.0], degrees=90)  # 左手的旋转
 
         # -------------------------------------------------------------------------
         """
         目标位置：定义一个机械臂在空间中移动的目标位置 meet_xyz，通常用于双臂之间的协调操作（例如交接物体）
         """
-        meet_xyz = np.array([0, 0.5, 0.25])
+        meet_xyz = np.array([0, 0.5, 0.25])  # 左右手在空间中交接的位置
 
         # -------------------------------------------------------------------------
         """
