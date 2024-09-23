@@ -101,7 +101,7 @@ def main(args):
         """
         计算回报和成功判断
             计算回报：计算 episode 中所有时间步的总回报 (episode_return) 和最大回报 (episode_max_reward)。
-            判断成功：如果最大回报等于任务的最大回报，则认为该集成功。
+            判断成功：如果最大回报等于任务的最大回报，则认为该集成功。我们设定的max_reward是4
         """
         episode_return = np.sum([ts.reward for ts in episode[1:]])
         episode_max_reward = np.max([ts.reward for ts in episode[1:]])
@@ -116,6 +116,7 @@ def main(args):
             获取关节轨迹：从 episode 中提取出每个时间步的关节位置 (qpos) 和夹爪控制 (gripper_ctrl)。
             替换关节位置：用归一化的夹爪控制值替换原始的关节位置。PUPPET_GRIPPER_POSITION_NORMALIZE_FN函数是进行归一化的
             保存子任务信息：复制环境状态中的初始盒子位姿到变量subtask_info中。
+        值得注意的是，这里用归一化之后的 gripper_ctrl 替换了 joint_traj 中的部分 qpos 值
         """
         joint_traj = [ts.observation['qpos'] for ts in episode]
         # replace gripper pose with gripper control
@@ -123,8 +124,8 @@ def main(args):
         for joint, ctrl in zip(joint_traj, gripper_ctrl_traj):
             left_ctrl = PUPPET_GRIPPER_POSITION_NORMALIZE_FN(ctrl[0])
             right_ctrl = PUPPET_GRIPPER_POSITION_NORMALIZE_FN(ctrl[2])
-            joint[6] = left_ctrl
-            joint[6 + 7] = right_ctrl
+            joint[6] = left_ctrl      # 左爪的值
+            joint[6 + 7] = right_ctrl # 右爪的值
 
         subtask_info = episode[0].observation['env_state'].copy()  # box pose at step 0
 
@@ -245,9 +246,9 @@ def main(args):
         while joint_traj:
             action = joint_traj.pop(0)
             ts = episode_replay.pop(0)
-            data_dict['/observations/qpos'].append(ts.observation['qpos'])
+            data_dict['/observations/qpos'].append(ts.observation['qpos'])  # 这里的值夹爪是没有归一化的
             data_dict['/observations/qvel'].append(ts.observation['qvel'])
-            data_dict['/action'].append(action)
+            data_dict['/action'].append(action)  # action 和 qpos 其实是一样的，但是其中夹爪的部分被归一化了
             for cam_name in camera_names:
                 data_dict[f'/observations/images/{cam_name}'].append(ts.observation['images'][cam_name])
 
@@ -264,7 +265,12 @@ def main(args):
             图像数据集：为每个相机创建一个数据集，用于存储图像，数据类型为 uint8，并指定数据块大小（chunks）为 (1, 480, 640, 3)。
             关节位置和速度数据集：创建 qpos 和 qvel 数据集，数据类型为 float64。
             动作数据集：创建 action 数据集，数据类型为 float64。
-        TODO：数据的物理含义！！
+        
+        被保存的数据的物理含义：
+            images 不必说
+            qpos：左臂6个joint pose，左夹爪1个归一化的值；右臂6个joint pose，右夹爪1个归一化的值（0关1开，浮点型中间的值）
+            qvel：左右手的关节速度，以rad/s
+            action：？
         """
         # HDF5
         t0 = time.time()
@@ -281,7 +287,6 @@ def main(args):
             qpos = obs.create_dataset('qpos', (max_timesteps, 14))
             qvel = obs.create_dataset('qvel', (max_timesteps, 14))
             action = root.create_dataset('action', (max_timesteps, 14))
-
             """
             填充数据并完成保存
                 填充数据：遍历 data_dict，将数据填充到对应的 HDF5 数据集中。
@@ -290,6 +295,16 @@ def main(args):
             for name, array in data_dict.items():
                 root[name][...] = array
         print(f'Saving: {time.time() - t0:.1f} secs\n')
+
+        # -------------------- debug 调试 --------------------
+        with h5py.File(dataset_path + '.hdf5', 'r') as f:
+            # 查看 qpos, qvel, action 的数值
+            qpos_data = np.array(f['/observations/qpos'])
+            qvel_data = np.array(f['/observations/qvel'])
+            action_data = np.array(f['/action'])
+        debug = 1
+        # -------------------- debug 调试 --------------------
+
 
     print(f'Saved to {dataset_dir}')
     print(f'Success: {np.sum(success)} / {len(success)}')
