@@ -91,15 +91,15 @@ def main(args):
         for step in range(episode_len):
             action = policy(ts)  # action是当前step的左右的pose+四元数+gripper状态，其中gripper状态是0-1的数值，总共16个数值，即ndarray(16)
             ts = env.step(action)  # 此行代码在执行 ee_sim_env.py 中的各种Task，
-            episode.append(ts)
+            episode.append(ts)    # *IMPORTANT*: 注意这里我们把每个时间步ts都append进episode中，这个记录的当前每一帧的所有状态!!
             if onscreen_render:
                 plt_img.set_data(ts.observation['images'][render_cam_name])
                 plt.pause(0.002)
         plt.close()
-
+        # !!!以上我们就完成了每一帧的ts时间步信息都保存在episode中了!!!
         # -------------------------------------------------------------------------
         """
-        计算回报和成功判断
+        计算回报和成功判断：在任务定义的部分已经定义了reward为4则认为任务成功，见ee_sim_env.py的class TransferCubeEETask
             计算回报：计算 episode 中所有时间步的总回报 (episode_return) 和最大回报 (episode_max_reward)。
             判断成功：如果最大回报等于任务的最大回报，则认为该集成功。我们设定的max_reward是4
         """
@@ -116,7 +116,9 @@ def main(args):
             获取关节轨迹：从 episode 中提取出每个时间步的关节位置 (qpos) 和夹爪控制 (gripper_ctrl)。
             替换关节位置：用归一化的夹爪控制值替换原始的关节位置。PUPPET_GRIPPER_POSITION_NORMALIZE_FN函数是进行归一化的
             保存子任务信息：复制环境状态中的初始盒子位姿到变量subtask_info中。
-        值得注意的是，这里用归一化之后的 gripper_ctrl 替换了 joint_traj 中的部分 qpos 值
+        
+        *IMPORTANT*:注意在这里我们把之前每个时间步ts的'qpos'状态都记录在变量joint_traj中，而删除掉之前的episode
+        *IMPORTANT*:值得注意的是，这里用归一化之后的 gripper_ctrl 替换了 joint_traj 中的部分 qpos 值
         """
         joint_traj = [ts.observation['qpos'] for ts in episode]
         # replace gripper pose with gripper control
@@ -146,7 +148,7 @@ def main(args):
         BOX_POSE[0] = subtask_info  # make sure the sim_env has the same object configurations as ee_sim_env
         ts = env.reset()
 
-        episode_replay = [ts]
+        episode_replay = [ts]  # 在replay中，先把
 
         # -------------------------------------------------------------------------
         """
@@ -156,18 +158,29 @@ def main(args):
             实时更新图像：如果启用了渲染，每次迭代都会更新显示的图像。
             关闭绘图：完成后关闭绘图。
         """
-        # setup plotting
+        # Assuming onscreen_render is a boolean variable
         if onscreen_render:
-            ax = plt.subplot()
-            plt_img = ax.imshow(ts.observation['images'][render_cam_name])
-            plt.ion()
-        for t in range(len(joint_traj)):  # note: this will increase episode length by 1
+            fig, axs = plt.subplots(1, 3)  # Create a 1x3 grid of subplots
+            render_cam_ax = axs[0].imshow(ts.observation['images'][render_cam_name])
+            left_wrist_ax = axs[1].imshow(ts.observation['images']['left_wrist'])
+            right_wrist_ax = axs[2].imshow(ts.observation['images']['right_wrist'])
+            plt.ion()  # Turn on interactive mode
+        # Loop through joint_traj
+        for t in range(len(joint_traj)):  # note: this will increase episode length by 1; joint_traj=401
+            """
+            *IMPORTANT*: 注意以下我们将来自episode的joint_traj有重置在了action变量中，
+            这意味着action变量保存的是每帧当前补的信息，即当前时间步的qpos
+            *IMPORTANT*: 在
+            """
             action = joint_traj[t]
             ts = env.step(action)
-            episode_replay.append(ts)
+            episode_replay.append(ts)  # episode_replay 在这里的长度应该是402，而joint_traj则是401
             if onscreen_render:
-                plt_img.set_data(ts.observation['images'][render_cam_name])
-                plt.pause(0.02)
+                # Update the images in each subplot
+                render_cam_ax.set_data(ts.observation['images'][render_cam_name])
+                left_wrist_ax.set_data(ts.observation['images']['left_wrist'])
+                right_wrist_ax.set_data(ts.observation['images']['right_wrist'])
+                plt.pause(0.02)  # Pause for a short interval to update the display
 
         # -------------------------------------------------------------------------
         """
@@ -226,8 +239,8 @@ def main(args):
         """
         # because the replaying, there will be eps_len + 1 actions and eps_len + 2 timesteps
         # truncate here to be consistent
-        joint_traj = joint_traj[:-1]
-        episode_replay = episode_replay[:-1]
+        joint_traj = joint_traj[:-1]            # joint_traj 长度变为400，含义是joint_traj为每个ts时间步的当前qpos
+        episode_replay = episode_replay[:-1]    # episode_replay 长度变为401，这里是每个时间步ts下一时刻的qpos
 
         # -------------------------------------------------------------------------
         """
