@@ -35,22 +35,23 @@ def get_auto_index(dataset_dir):
     raise Exception(f"Error getting auto index, or more than {max_idx} episodes")
 
 def main(args):
+    # 设置随机种子，保证实验可重复
     set_seed(1)
-    # command line parameters
-    is_eval = args['eval']
-    ckpt_dir = args['ckpt_dir']
-    policy_class = args['policy_class']
-    onscreen_render = args['onscreen_render']
-    task_name = args['task_name']
-    batch_size_train = args['batch_size']
-    batch_size_val = args['batch_size']
-    num_steps = args['num_steps']
-    eval_every = args['eval_every']
-    validate_every = args['validate_every']
-    save_every = args['save_every']
-    resume_ckpt_path = args['resume_ckpt_path']
+    # command line parameters 解析命令行参数
+    is_eval = args['eval']                          # is_eval: False
+    ckpt_dir = args['ckpt_dir']                     # ckpt_dir: 'ckpt_dir_sim_transfer_cube_scripted'
+    policy_class = args['policy_class']             # policy_class: 'ACT'
+    onscreen_render = args['onscreen_render']       # onscreen_render: False
+    task_name = args['task_name']                   # task_name: 'sim_transfer_cube_scripted'
+    batch_size_train = args['batch_size']           # batch_size_train: 2
+    batch_size_val = args['batch_size']             # batch_size_val: 2
+    num_steps = args['num_steps']                   # num_steps: 2000
+    eval_every = args['eval_every']                 # eval_every: 500
+    validate_every = args['validate_every']         # validate_every: 500
+    save_every = args['save_every']                 # save_every: 500
+    resume_ckpt_path = args['resume_ckpt_path']     # resume_ckpt_path: None
 
-    # get task parameters
+    # get task parameters 任务参数设置
     is_sim = task_name[:4] == 'sim_'
     if is_sim or task_name == 'all':
         from constants import SIM_TASK_CONFIGS
@@ -58,19 +59,20 @@ def main(args):
     else:
         from aloha_scripts.constants import TASK_CONFIGS
         task_config = TASK_CONFIGS[task_name]
-    dataset_dir = task_config['dataset_dir']
+    dataset_dir = task_config['dataset_dir']                    # dataset_dir: '/home/kb/MyProjects/act-plus-plus/act/data/sim_transfer_cube_scripted'
     # num_episodes = task_config['num_episodes']
-    episode_len = task_config['episode_len']
-    camera_names = task_config['camera_names']
-    stats_dir = task_config.get('stats_dir', None)
-    sample_weights = task_config.get('sample_weights', None)
-    train_ratio = task_config.get('train_ratio', 0.99)
-    name_filter = task_config.get('name_filter', lambda n: True)
+    episode_len = task_config['episode_len']                    # episode_len: 400
+    camera_names = task_config['camera_names']                  # camera_names: ['top', 'left_wrist', 'right_wrist']
+    stats_dir = task_config.get('stats_dir', None)              # stats_dir: None
+    sample_weights = task_config.get('sample_weights', None)    # sample_weights: None
+    train_ratio = task_config.get('train_ratio', 0.99)          # train_ratio: 0.99
+    name_filter = task_config.get('name_filter', lambda n: True)#
 
-    # fixed parameters
+    # fixed parameters | policy的参数设置
     state_dim = 14
     lr_backbone = 1e-5
     backbone = 'resnet18'
+    #  构建策略配置
     if policy_class == 'ACT':
         enc_layers = 4
         dec_layers = 7
@@ -93,7 +95,6 @@ def main(args):
                          'no_encoder': args['no_encoder'],
                          }
     elif policy_class == 'Diffusion':
-
         policy_config = {'lr': args['lr'],
                          'camera_names': camera_names,
                          'action_dim': 16,
@@ -140,6 +141,7 @@ def main(args):
         'actuator_config': actuator_config,
     }
 
+    # 配置文件保存和WandB初始化：将配置文件保存在指定目录中，如果不是评估模式，则初始化WandB来记录实验
     if not os.path.isdir(ckpt_dir):
         os.makedirs(ckpt_dir)
     config_path = os.path.join(ckpt_dir, 'config.pkl')
@@ -162,17 +164,19 @@ def main(args):
         print()
         exit()
 
+    # 加载数据集
     train_dataloader, val_dataloader, stats, _ = load_data(dataset_dir, name_filter, camera_names, batch_size_train, batch_size_val, args['chunk_size'], args['skip_mirrored_data'], config['load_pretrain'], policy_class, stats_dir_l=stats_dir, sample_weights=sample_weights, train_ratio=train_ratio)
 
-    # save dataset stats
+    # save dataset stats | 保存数据集统计信息，将数据集的统计信息保存为一个pkl文件，以便后续使用
     stats_path = os.path.join(ckpt_dir, f'dataset_stats.pkl')
     with open(stats_path, 'wb') as f:
         pickle.dump(stats, f)
 
+    # 训练过程
     best_ckpt_info = train_bc(train_dataloader, val_dataloader, config)
     best_step, min_val_loss, best_state_dict = best_ckpt_info
 
-    # save best checkpoint
+    # save best checkpoint | 保存最佳checkpoint
     ckpt_path = os.path.join(ckpt_dir, f'policy_best.ckpt')
     torch.save(best_state_dict, ckpt_path)
     print(f'Best ckpt, val loss {min_val_loss:.6f} @ step{best_step}')

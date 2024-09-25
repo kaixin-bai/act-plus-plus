@@ -283,7 +283,7 @@ def main(args):
             images 不必说
             qpos：左臂6个joint pose，左夹爪1个归一化的值；右臂6个joint pose，右夹爪1个归一化的值（0关1开，浮点型中间的值）
             qvel：左右手的关节速度，以rad/s
-            action：？
+            action：qpos？
         """
         # HDF5
         t0 = time.time()

@@ -220,17 +220,17 @@ def BatchSampler(batch_size, episode_len_l, sample_weights):
 def load_data(dataset_dir_l, name_filter, camera_names, batch_size_train, batch_size_val, chunk_size, skip_mirrored_data=False, load_pretrain=False, policy_class=None, stats_dir_l=None, sample_weights=None, train_ratio=0.99):
     if type(dataset_dir_l) == str:
         dataset_dir_l = [dataset_dir_l]
-    dataset_path_list_list = [find_all_hdf5(dataset_dir, skip_mirrored_data) for dataset_dir in dataset_dir_l]
-    num_episodes_0 = len(dataset_path_list_list[0])
+    dataset_path_list_list = [find_all_hdf5(dataset_dir, skip_mirrored_data) for dataset_dir in dataset_dir_l]  # 生成的hdf5文件的path，list中以str形式给出
+    num_episodes_0 = len(dataset_path_list_list[0])  # num_episodes_0: 50
     dataset_path_list = flatten_list(dataset_path_list_list)
-    dataset_path_list = [n for n in dataset_path_list if name_filter(n)]
+    dataset_path_list = [n for n in dataset_path_list if name_filter(n)]  # 把hdf5文件从一个list变成50个list
     num_episodes_l = [len(dataset_path_list) for dataset_path_list in dataset_path_list_list]
-    num_episodes_cumsum = np.cumsum(num_episodes_l)
+    num_episodes_cumsum = np.cumsum(num_episodes_l)  # num_episodes_cumsum: [50]
 
     # obtain train test split on dataset_dir_l[0]
-    shuffled_episode_ids_0 = np.random.permutation(num_episodes_0)
-    train_episode_ids_0 = shuffled_episode_ids_0[:int(train_ratio * num_episodes_0)]
-    val_episode_ids_0 = shuffled_episode_ids_0[int(train_ratio * num_episodes_0):]
+    shuffled_episode_ids_0 = np.random.permutation(num_episodes_0)  # 生成一个ndarray，其中的数字是打乱的从0到49
+    train_episode_ids_0 = shuffled_episode_ids_0[:int(train_ratio * num_episodes_0)]  # 前49个
+    val_episode_ids_0 = shuffled_episode_ids_0[int(train_ratio * num_episodes_0):]    # 最后1个
     train_episode_ids_l = [train_episode_ids_0] + [np.arange(num_episodes) + num_episodes_cumsum[idx] for idx, num_episodes in enumerate(num_episodes_l[1:])]
     val_episode_ids_l = [val_episode_ids_0]
     train_episode_ids = np.concatenate(train_episode_ids_l)
